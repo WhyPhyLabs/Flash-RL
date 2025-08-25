@@ -47,7 +47,7 @@ bash verl/examples/ppo_trainer/run_qwen2.5-32b.sh
 ```
 
 ### Using with SGLang Rollout (veRL)
-FlashRL now patches SGLang rollouts as well. Keep using the same `FLASHRL_CONFIG` env var and select the SGLang backend in veRL. Example:
+FlashRL now patches SGLang rollouts as well. Keep using the same `FLASHRL_CONFIG` env var and select the SGLang backend in veRL. By default, FlashRL defers to SGLang’s FP8 format defaults for both weights and KV cache.
 
 ```bash
 pip install "verl[sglang]" flash-llm-rl
@@ -57,11 +57,13 @@ export SGL_DISABLE_TP_MEMORY_INBALANCE_CHECK=True
 export FLASHRL_CONFIG=bf16
 python -m verl.trainer.main_ppo actor_rollout_ref.rollout.name=sglang ...
 
-# Option B: FP8 weights + FP8 KV cache (memory-efficient rollouts)
+# Option B: FP8 weights (KV dtype defers to SGLang unless overridden)
 export FLASHRL_CONFIG=fp8
 python -m verl.trainer.main_ppo actor_rollout_ref.rollout.name=sglang ...
 
-# Optional: disable FP8 KV cache while keeping FP8 weights
+# Optional: pick a specific FP8 KV dtype (otherwise SGLang decides)
+# export FLASHRL_KV_CACHE_DTYPE=fp8_e5m2  # or fp8_e4m3
+# Optional: disable FP8 KV cache override entirely
 # export FLASHRL_DISABLE_FP8_KV=1
 ```
 
@@ -118,7 +120,8 @@ Patcher would check the environment variable and operates accordingly. Please fi
 |--|--|
 | `FLASHRL_CONFIG` | applies patcher if configured, supports `bf16`, `fp8`, local profile paths (e.g., `$HOME/.flashrl_config.32b.yaml`), and uploaded profiles (e.g., `LiyuanLucasLiu/Qwen2.5-0.5B-Instruct-quantized.w8a8-RedHatAI/flashrl_config.yaml`) |
 | `FLASHRL_LMHEAD_FP32` | if set to `1`, forcing `vLLM` conducting `lm head` compute in `bf16` (ignored for SGLang)
-| `FLASHRL_DISABLE_FP8_KV` | if set to `1`, keep FP8 weights but do not change SGLang KV cache dtype (SGLang only) |
+| `FLASHRL_KV_CACHE_DTYPE` | if set, explicitly selects the FP8 KV cache dtype (e.g., `fp8_e5m2` or `fp8_e4m3`); otherwise FlashRL defers to SGLang’s default |
+| `FLASHRL_DISABLE_FP8_KV` | if set to `1`, FlashRL will not set `kv_cache_dtype` even if `FLASHRL_KV_CACHE_DTYPE` is provided |
 | `FLASHRL_LOGGING_LEVEL` | set to `DEBUG` to turn on verbose logging for FlashRL functions |
 | `FLASHRL_LOGGING_FILE` | if set, will save the log to files as well | 
 | `FLASHRL_TEST_RELOAD` | functionality provided to test FlashRL install, check [this guide](./tutorial/verify_flashrl_install.md) for more details |
@@ -145,20 +148,13 @@ Below are the combinations of the environments that we have tested on.
 
 ### SGLang Compatibility
 - Minimum: `sglang >= 0.3.6`
-  - Reason: FP8 rollout flags are supported via server/engine args
-    `--quantization fp8` (weights) and `--kv-cache-dtype fp8_e5m2` (KV cache). See
-    “Server Arguments” docs; kv-cache dtype notes indicate CUDA 11.8+ is required.
-  - Reference: SGLang docs (Server Arguments) and codepaths referenced from 0.3.x.
+  - Reason: FP8 rollout flags are supported via server/engine args `--quantization fp8` (weights) and `--kv-cache-dtype` (KV cache). FlashRL does not force a KV dtype; SGLang’s default behavior applies unless you set `FLASHRL_KV_CACHE_DTYPE`.
+  - Note: SGLang docs indicate FP8 KV cache requires CUDA 11.8+.
 - Recommended: `sglang >= 0.4.x`
-  - Provides stable `return_logprob`, `logprob_start_len`, and `top_logprobs_num`
-    in native `/generate` and Python APIs. Use `logprob_start_len` to limit prompt
-    scoring for long inputs to reduce memory.
-  - Note: high concurrency with `return_logprob=True` can increase memory pressure;
-    consider lowering `--mem-fraction-static` and/or rate limiting (see SGLang
-    tracker discussion around 0.4.x).
+  - Stable `return_logprob`, `logprob_start_len`, and `top_logprobs_num` in native `/generate` and Python APIs. Use `logprob_start_len` to limit prompt scoring for long inputs.
+  - High concurrency with `return_logprob=True` can increase memory pressure; consider reducing `--mem-fraction-static` and/or throttling.
 
-If your environment predates these versions, Flash‑RL will fall back to logprob
-patch-only behavior without changing SGLang engine quantization.
+On older SGLang versions, Flash‑RL falls back to logprob‑patch‑only behavior without modifying engine quantization.
 
 ## 🚧 Roadmap & Future Improvements
 

@@ -21,11 +21,12 @@ def _map_flashrl_to_sglang_args() -> Dict[str, Any]:
         return {}
 
     if cfg.lower() == "fp8":
-        # Allow users to opt out of FP8 KV cache while keeping weights in FP8
-        disable_kv = os.environ.get("FLASHRL_DISABLE_FP8_KV", "0") == "1"
+        # Defer FP8 specifics to SGLang defaults. Only set kv_cache_dtype if explicitly requested.
         args: Dict[str, Any] = {"quantization": "fp8"}
-        if not disable_kv:
-            args["kv_cache_dtype"] = "fp8_e5m2"
+        kv_dtype = os.environ.get("FLASHRL_KV_CACHE_DTYPE")
+        disable_kv = os.environ.get("FLASHRL_DISABLE_FP8_KV", "0") == "1"
+        if kv_dtype and not disable_kv:
+            args["kv_cache_dtype"] = kv_dtype
         return args
 
     # YAML profile support can be extended here.
@@ -85,4 +86,3 @@ def patch_sglang_engine_init() -> bool:
     except Exception as e:
         logger.warning("Failed to patch SGLang Engine init: %s", e)
         return False
-
