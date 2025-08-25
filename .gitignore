@@ -201,3 +201,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Ignore local Git hook
+.githooks/prepare-commit-msg
