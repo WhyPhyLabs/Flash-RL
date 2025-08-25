@@ -71,6 +71,9 @@ Notes:
 - For very long prompts with input logprobs, prefer setting `logprob_start_len` to limit scoring scope (see SGLang docs).
 - `FLASHRL_LMHEAD_FP32` has no effect on SGLang and is ignored with a warning.
 - Optional: to avoid patching multiple backends when both vLLM and SGLang are installed, set `FLASHRL_BACKEND` to `sglang`, `vllm`, or `auto` (default is `auto`).
+- Engine arg precedence: Flash‑RL only sets defaults; any user‑provided
+  SGLang engine kwargs (e.g., `quantization`, `kv_cache_dtype`) always override
+  Flash‑RL’s injected values.
 ### RL Logprob Patch Only
 Setting the config to `bf16` to extract precise logprob used in sampling without rollout quantization. This is useful for applying the [Truncated Importance Sampling](https://fengyao.notion.site/off-policy-rl?source=copy_link). 
 
