@@ -70,7 +70,15 @@ def _activate_vllm():
     if not check_vllm_installed():
         logger.debug("vLLM not installed; skipping vLLM patching.")
         return
-    from .vllm_patch import patch_vllm_llm, patch_vllm_process_weights_after_loading
+    from .vllm_patch import (
+        patch_vllm_llm,
+        patch_vllm_process_weights_after_loading,
+    )
+    # patch optional new upstream feature if available
+    try:
+        from .vllm_patch import patch_vllm_fp8_create_weight  # type: ignore
+    except Exception:
+        patch_vllm_fp8_create_weight = None
 
     process_weights_status = patch_vllm_process_weights_after_loading()
     logger.debug(
@@ -81,6 +89,13 @@ def _activate_vllm():
     logger.debug(
         f"Patching the vllm LLM to enable flash_rl quantization... status: {patch_status}"
     )
+
+    if patch_vllm_fp8_create_weight is not None:
+        try:
+            fp8w_status = patch_vllm_fp8_create_weight()
+            logger.debug(f"Patching the vllm fp8 linear... status: {fp8w_status}")
+        except Exception as e:
+            logger.debug(f"Failed to patch vllm fp8 create_weights: {e}")
 
     if 'FLASHRL_TEST_RELOAD' in os.environ:
         from .vllm_patch import patch_vllm_llm_test_reload
@@ -131,3 +146,4 @@ def _activate_backends():
 
 
 _activate_backends()
+    
