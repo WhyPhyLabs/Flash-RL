@@ -1,11 +1,12 @@
-from dataclasses import asdict
-import logging
 import argparse
-import os 
+import logging
+import os
+from dataclasses import asdict
+
 import yaml
 
 from .configs import get_default_config
-from .flash_quantization import profiling_int8, profiling_fp8
+from .flash_quantization import profiling_fp8, profiling_int8
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ def setup_flashrl_env():
                            
     if need_usercustomize:
         with open(os.path.join(path, 'usercustomize.py'), 'a') as f:
-            f.write(f"try: import flash_rl\nexcept ImportError: pass\n")
+            f.write("try: import flash_rl\nexcept ImportError: pass\n")
             logger.info("flash_rl setup added to usercustomize.py")
 
 def setup_flashrl_runner(args):

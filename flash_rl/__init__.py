@@ -31,6 +31,14 @@ def check_vllm_installed():
     except ImportError:
         return False
 
+def check_sglang_installed():
+    """Check if sglang is installed"""
+    try:
+        import sglang  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
 def check_dist_initialized():
     """Check if distributed environment is initialized"""
     try:
@@ -40,26 +48,47 @@ def check_dist_initialized():
         return False
 
 # Check if patching is needed based on environment variables
-if 'FLASHRL_CONFIG' in os.environ and check_vllm_installed():
-    
-    from .vllm_patch import patch_vllm_llm, patch_vllm_process_weights_after_loading
-    
-    # Patch the process_weights_after_loading function
-    process_weights_status = patch_vllm_process_weights_after_loading()
-    logger.debug(f"Patching vllm process_weights_after_loading... status: {process_weights_status}")
-    
-    # Patch the LLM class
-    patch_status = patch_vllm_llm()
-    logger.debug(f"Patching the vllm LLM to enable flash_rl quantization... status: {patch_status}")
-    
-    if 'FLASHRL_TEST_RELOAD' in os.environ:
-        from .vllm_patch import patch_vllm_llm_test_reload
-        reload_status = patch_vllm_llm_test_reload()
-        logger.debug(f"Patching vllm LLM init to test reload... status: {reload_status}")
+if 'FLASHRL_CONFIG' in os.environ:
+    # Attempt to patch vLLM when available
+    if check_vllm_installed():
+        from .vllm_patch import patch_vllm_llm, patch_vllm_process_weights_after_loading
 
-    if os.environ.get('FLASHRL_LMHEAD_FP32', '0') == '1':
-        from .vllm_patch import patch_vllm_lmhead_to_fp32
-        patch_status = patch_vllm_lmhead_to_fp32()
-        logger.debug(f"Patching vllm lmhead to fp32... status: {patch_status}")
+        process_weights_status = patch_vllm_process_weights_after_loading()
+        logger.debug(
+            f"Patching vllm process_weights_after_loading... status: {process_weights_status}"
+        )
+
+        patch_status = patch_vllm_llm()
+        logger.debug(
+            f"Patching the vllm LLM to enable flash_rl quantization... status: {patch_status}"
+        )
+
+        if 'FLASHRL_TEST_RELOAD' in os.environ:
+            from .vllm_patch import patch_vllm_llm_test_reload
+
+            reload_status = patch_vllm_llm_test_reload()
+            logger.debug(
+                f"Patching vllm LLM init to test reload... status: {reload_status}"
+            )
+
+        if os.environ.get('FLASHRL_LMHEAD_FP32', '0') == '1':
+            from .vllm_patch import patch_vllm_lmhead_to_fp32
+
+            patch_status = patch_vllm_lmhead_to_fp32()
+            logger.debug(f"Patching vllm lmhead to fp32... status: {patch_status}")
+    else:
+        logger.debug("vLLM not installed; skipping vLLM patching.")
+
+    # Attempt to patch SGLang when available
+    if check_sglang_installed():
+        try:
+            from .sglang_patch import auto_patch as _sglang_auto_patch
+
+            _sglang_status = _sglang_auto_patch()
+            logger.debug(f"SGLang adapter status: {_sglang_status}")
+        except Exception as e:
+            logger.warning(f"Failed to activate SGLang adapter: {e}")
+    else:
+        logger.debug("SGLang not installed; skipping SGLang patching.")
 else:
-    logger.debug("Skipping the patching of vllm")
+    logger.debug("FLASHRL_CONFIG not set; skipping backend patching")

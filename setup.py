@@ -1,8 +1,9 @@
 # python setup.py sdist bdist_wheel
 # twine upload dist/*
 
-from setuptools import setup, find_packages
-import logging 
+import logging
+
+from setuptools import find_packages, setup
 
 logger = logging.getLogger(__name__)
 
@@ -11,8 +12,8 @@ def read_readme():
         return f.read()
     
 def setup_flashrl_env():
-    import site
     import os
+    import site
     path = site.getsitepackages()[0]
     need_usercustomize = True
     if os.path.exists(os.path.join(path, 'usercustomize.py')):
@@ -25,7 +26,7 @@ def setup_flashrl_env():
                            
     if need_usercustomize:
         with open(os.path.join(path, 'usercustomize.py'), 'a') as f:
-            f.write(f"try: import flash_rl\nexcept ImportError: pass\n")
+            f.write("try: import flash_rl\nexcept ImportError: pass\n")
             logger.info("flash_rl setup added to usercustomize.py")
 
 with open('HISTORY.rst') as history_file:

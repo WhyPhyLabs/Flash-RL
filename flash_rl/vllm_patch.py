@@ -1,9 +1,10 @@
+import gc
 import logging
 import os
-import vllm
-import torch 
 import types
-import gc
+
+import torch
+import vllm
 from packaging.version import parse
 
 from .flash_quantization import get_quantize_fn
@@ -45,8 +46,8 @@ def hacked_process_weights_after_loading(
         model_config = getattr(model, 'hacked_model_config', None)
         target_device = getattr(model, 'hacked_target_device', None)
     else:
-        setattr(model, 'hacked_model_config', model_config)
-        setattr(model, 'hacked_target_device', target_device)
+        model.hacked_model_config = model_config
+        model.hacked_target_device = target_device
 
     if getattr(model, 'hacked_not_need_process_weights_after_loading', False):
         logger.debug("vllm process_weights_after_loading already processed")
@@ -229,7 +230,7 @@ def patch_vllm_lmhead_to_fp32():
                         original_forward_return = original_forward(*args, **kwargs)
                         return original_forward_return.to(self.output_dtype)
 
-                    setattr(self, 'forward', bond_method_to_cls(hacked_forward, self))
+                    self.forward = bond_method_to_cls(hacked_forward, self)
                     logger.debug("Successfully patched vllm VocabParallelEmbedding forward to fp32 weight")
                 else: 
                     logger.debug("vllm VocabParallelEmbedding forward already patched to fp32 weight")
@@ -395,8 +396,9 @@ def load_flashrl_config(config):
     if config_path in ['bf16', 'fp8', 'fp8_vllm']: 
         logger.info(f"Using profile-free default for: {config_path}")
         
-        from .configs import get_default_config
         from dataclasses import asdict
+
+        from .configs import get_default_config
         config_data = {'configs': [asdict(get_default_config(config_path))]}
     else:        
         logger.info(f"Loading flash_rl config from: {config_path}")
@@ -448,7 +450,7 @@ def patch_vllm_llm():
                 if config is not None:
                     # Load the config file and set the model
                     # Assuming config is a JSON file, you can use json.load() to read it
-                    logger.info(f"flash_rl config detected.")
+                    logger.info("flash_rl config detected.")
                     config_data = load_flashrl_config(config)
                         
                     config_count = len(config_data['configs'])
@@ -501,7 +503,7 @@ def patch_vllm_llm():
                         self.flash_rl_module_attribute_to_preserve = []
                         
                 else:
-                    logger.info(f"flash_rl config not detected.")
+                    logger.info("flash_rl config not detected.")
                     logger.info(f"Using the original model: {model}")
                 
                 # Call the parent's __init__ with the custom model
@@ -525,7 +527,7 @@ def patch_vllm_llm():
                     def hacked_load_weights(
                         weights,
                     ):
-                        setattr(model, 'hacked_not_need_process_weights_after_loading', False)
+                        model.hacked_not_need_process_weights_after_loading = False
                         
                         if not hasattr(model, "hacked_original_weights_rebuild_keys"):
                             return original_load_weights(flash_quantize_fn(weights, self.flash_rl_profile))
@@ -565,9 +567,9 @@ def patch_vllm_llm():
                             except ImportError:
                                 from vllm.model_executor.model_loader import utils
                                 utils.process_weights_after_loading(model, None, None)
-                            setattr(model, 'hacked_not_need_process_weights_after_loading', True)
+                            model.hacked_not_need_process_weights_after_loading = True
                         else:
-                            setattr(model, 'hacked_not_need_process_weights_after_loading', False)
+                            model.hacked_not_need_process_weights_after_loading = False
                         
                         skipped_params = list()
                         for name, p in model.named_parameters():
@@ -650,7 +652,7 @@ def patch_vllm_llm_test_reload():
                             ((name, param.to(device)) for name, param in model_to_be_reloaded.named_parameters())
                         )
                 else:
-                    print(f"FLASH_RL re-loading model not detected.")
+                    print("FLASH_RL re-loading model not detected.")
                 
                 return init_return
             

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import List, Any, Optional
+from typing import List
+
 
 @dataclass
 class FP8TensorConfig:

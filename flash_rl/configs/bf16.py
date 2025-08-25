@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class BF16Config:
     fn: str = 'bf16'

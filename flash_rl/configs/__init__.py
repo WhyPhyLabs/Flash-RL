@@ -1,6 +1,7 @@
-from .fp8 import FP8TensorConfig, FP8ChannelConfig, FP8vLLMConfig
-from .int8 import Int8Config, Int8PruneConfig
 from .bf16 import BF16Config
+from .fp8 import FP8ChannelConfig, FP8TensorConfig, FP8vLLMConfig
+from .int8 import Int8Config, Int8PruneConfig
+
 
 def get_default_config(fn):
     return {

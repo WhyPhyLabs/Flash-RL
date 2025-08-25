@@ -46,6 +46,29 @@ bash verl/examples/ppo_trainer/run_qwen2.5-32b.sh
 # > bash verl/recipe/dapo/run_dapo_qwen2.5_32b.sh # this can be any scripts
 ```
 
+### Using with SGLang Rollout (veRL)
+FlashRL now patches SGLang rollouts as well. Keep using the same `FLASHRL_CONFIG` env var and select the SGLang backend in veRL. Example:
+
+```bash
+pip install "verl[sglang]" flash-llm-rl
+export SGL_DISABLE_TP_MEMORY_INBALANCE_CHECK=True
+
+# Option A: logprob patch only (no quant)
+export FLASHRL_CONFIG=bf16
+python -m verl.trainer.main_ppo actor_rollout_ref.rollout.name=sglang ...
+
+# Option B: FP8 weights + FP8 KV cache (memory-efficient rollouts)
+export FLASHRL_CONFIG=fp8
+python -m verl.trainer.main_ppo actor_rollout_ref.rollout.name=sglang ...
+
+# Optional: disable FP8 KV cache while keeping FP8 weights
+# export FLASHRL_DISABLE_FP8_KV=1
+```
+
+Notes:
+- For very long prompts with input logprobs, prefer setting `logprob_start_len` to limit scoring scope (see SGLang docs).
+- `FLASHRL_LMHEAD_FP32` has no effect on SGLang and is ignored with a warning.
+
 ### RL Logprob Patch Only
 Setting the config to `bf16` to extract precise logprob used in sampling without rollout quantization. This is useful for applying the [Truncated Importance Sampling](https://fengyao.notion.site/off-policy-rl?source=copy_link). 
 
@@ -94,7 +117,8 @@ Patcher would check the environment variable and operates accordingly. Please fi
 |  Environment Variable | Usage | 
 |--|--|
 | `FLASHRL_CONFIG` | applies patcher if configured, supports `bf16`, `fp8`, local profile paths (e.g., `$HOME/.flashrl_config.32b.yaml`), and uploaded profiles (e.g., `LiyuanLucasLiu/Qwen2.5-0.5B-Instruct-quantized.w8a8-RedHatAI/flashrl_config.yaml`) |
-| `FLASHRL_LMHEAD_FP32` | if set to `1`, forcing `vLLM` conducting `lm head` compute in `bf16`
+| `FLASHRL_LMHEAD_FP32` | if set to `1`, forcing `vLLM` conducting `lm head` compute in `bf16` (ignored for SGLang)
+| `FLASHRL_DISABLE_FP8_KV` | if set to `1`, keep FP8 weights but do not change SGLang KV cache dtype (SGLang only) |
 | `FLASHRL_LOGGING_LEVEL` | set to `DEBUG` to turn on verbose logging for FlashRL functions |
 | `FLASHRL_LOGGING_FILE` | if set, will save the log to files as well | 
 | `FLASHRL_TEST_RELOAD` | functionality provided to test FlashRL install, check [this guide](./tutorial/verify_flashrl_install.md) for more details |
@@ -119,12 +143,29 @@ Below are the combinations of the environments that we have tested on.
 | `hiyouga/verl:ngc-th2.7.0-cu12.6-vllm0.9.1` | 12.6 | 2.43.0 | 0.9.1 | [flash-rl-vllm0.9.1](https://github.com/yaof20/verl/tree/flash-rl-vllm0.9.1/recipe/flash_rl) | 1.0.2| ✅ Tested | |
 | `hiyouga/verl:ngc-th2.7.1-cu12.6-vllm0.10.0` | 12.6 | 2.48.0 | 0.10.0 | [flash-rl-vllm0.9.1](https://github.com/yaof20/verl/tree/flash-rl-vllm0.9.1/recipe/flash_rl) | 1.0.2| ✅ Tested | |
 
+### SGLang Compatibility
+- Minimum: `sglang >= 0.3.6`
+  - Reason: FP8 rollout flags are supported via server/engine args
+    `--quantization fp8` (weights) and `--kv-cache-dtype fp8_e5m2` (KV cache). See
+    “Server Arguments” docs; kv-cache dtype notes indicate CUDA 11.8+ is required.
+  - Reference: SGLang docs (Server Arguments) and codepaths referenced from 0.3.x.
+- Recommended: `sglang >= 0.4.x`
+  - Provides stable `return_logprob`, `logprob_start_len`, and `top_logprobs_num`
+    in native `/generate` and Python APIs. Use `logprob_start_len` to limit prompt
+    scoring for long inputs to reduce memory.
+  - Note: high concurrency with `return_logprob=True` can increase memory pressure;
+    consider lowering `--mem-fraction-static` and/or rate limiting (see SGLang
+    tracker discussion around 0.4.x).
+
+If your environment predates these versions, Flash‑RL will fall back to logprob
+patch-only behavior without changing SGLang engine quantization.
+
 ## 🚧 Roadmap & Future Improvements
 
 We're working on several improvements to Flash-RL:
 
 - [ ] **Support of Other RL Toolkits**: Currently Flash-RL only supports `VeRL`, we are working on rolloing out support for other packages like `OpenRLHF`
-- [ ] **Support of Other LLM Inference Toolkits**: Currently Flash-RL only supports `vLLM`, we are working on rolloing out support for other tollkits like `SgLang`
+- [x] **Support of Other LLM Inference Toolkits**: SGLang rollout support added (env-driven, via veRL SGLang backend)
 - [ ] **Further Throughput Optimization**: We are working on implementing efficient GPU kernels to accelerate online quantization
 
 ## 📚 Citation
