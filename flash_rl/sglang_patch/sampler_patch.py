@@ -168,4 +168,3 @@ def patch_sglang_sampler() -> bool:
     except Exception as e:
         logger.warning("Failed to patch SGLang sampler: %s", e)
         return False
-

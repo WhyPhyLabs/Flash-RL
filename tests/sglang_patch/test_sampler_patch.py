@@ -20,7 +20,7 @@ def test_post_filter_distribution_topk():
     logits = torch.tensor([[0.0, 1.0, 2.0, 3.0]])  # increasing
     probs = mod.compute_post_filter_distribution(logits, temperature=1.0, top_k=2)
     # Only two largest kept (indices 2 and 3)
-    kept = probs.nonzero(as_tuple=False).squeeze(1).tolist()
+    kept = probs.nonzero(as_tuple=True)[-1].tolist()
     assert set(kept) == {2, 3}
     # Renormalized over the kept set
     assert math.isclose(float(probs.sum()), 1.0, rel_tol=1e-5)
@@ -45,4 +45,3 @@ def test_post_filter_distribution_minp():
     kept_mask = base >= (0.5 * maxp)
     assert torch.equal((probs > 0), kept_mask)
     assert math.isclose(float(probs.sum()), 1.0, rel_tol=1e-5)
-
