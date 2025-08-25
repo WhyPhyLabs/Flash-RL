@@ -62,22 +62,66 @@ def setup_flashrl(name, parser):
     subparser.set_defaults(func=setup_flashrl_runner)
     return subparser
 
-def setup_flashrl_env():
+def setup_flashrl_env() -> bool:
+    """Install a usercustomize.py snippet to auto-import flash_rl.
+
+    - Uses the user site-packages (safer than global site-packages).
+    - Writes a proper multi-line try/except block.
+    - Idempotent (skips if already present).
+    - Permission-safe with clear warnings.
+
+    Returns True if the snippet exists or was written successfully.
+    """
     import site
-    path = site.getsitepackages()[0]
-    need_usercustomize = True
-    if os.path.exists(os.path.join(path, 'usercustomize.py')):
-        with open(os.path.join(path, 'usercustomize.py'), 'r') as f:
-            for line in f.readlines():
-                if 'import flash_rl' in line and not line.strip().startswith("#"):
-                    logger.info("flash_rl already imported in usercustomize.py")
-                    need_usercustomize = False
-                    break
-                           
-    if need_usercustomize:
-        with open(os.path.join(path, 'usercustomize.py'), 'a') as f:
-            f.write("try: import flash_rl\nexcept ImportError: pass\n")
-            logger.info("flash_rl setup added to usercustomize.py")
+
+    try:
+        user_site = site.getusersitepackages()
+    except Exception as e:
+        logger.warning("flash-rl: Could not resolve user site-packages: %s", e)
+        return False
+
+    try:
+        os.makedirs(user_site, exist_ok=True)
+    except OSError as e:
+        logger.warning("flash-rl: Cannot create user site dir %s: %s", user_site, e)
+        return False
+
+    path = os.path.join(user_site, 'usercustomize.py')
+
+    # Proper multi-line try/except snippet
+    snippet = (
+        "try:\n"
+        "    import flash_rl\n"
+        "except ImportError:\n"
+        "    pass\n"
+    )
+
+    # Idempotence: skip if already imported
+    try:
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            if 'import flash_rl' in content and not any(
+                line.strip().startswith('#') and 'import flash_rl' in line for line in content.splitlines()
+            ):
+                logger.info("flash-rl: usercustomize.py already imports flash_rl; skipping.")
+                return True
+    except OSError:
+        # Continue to attempt append
+        pass
+
+    try:
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(snippet)
+        logger.info("flash-rl: wrote autoload snippet to %s", path)
+        return True
+    except OSError as e:
+        logger.warning(
+            "flash-rl: unable to write usercustomize.py at %s: %s; "
+            "Flash-RL still works if you import flash_rl manually.",
+            path, e,
+        )
+        return False
 
 def setup_flashrl_runner(args):
     if args.config_output is None:
@@ -141,35 +185,50 @@ def clean_up_flashrl(name, parser):
 def cleanup_flashrl_runner(args):
     if args.path is None:
         import site
-        path = site.getsitepackages()[0]
-        if os.path.exists(os.path.join(path, 'usercustomize.py')):
-            with open(os.path.join(path, 'usercustomize.py'), 'r') as f:
+        # Prefer user site where we wrote the snippet
+        user_site = site.getusersitepackages()
+        uc_path = os.path.join(user_site, 'usercustomize.py')
+        if os.path.exists(uc_path):
+            with open(uc_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
-                
+
             need_write = False 
             for i in range(len(lines)):
                 if 'import flash_rl' in lines[i]:
                     l_processed = lines[i].strip()
                     if not l_processed.startswith("#"):
+                        # Case 1: plain 'import flash_rl'
                         if l_processed == 'import flash_rl':
                             lines[i] = f"# {lines[i]}"
                             logger.info("flash_rl setup removed from usercustomize.py")
                             need_write = True
+                        # Case 2: legacy one-line try format
                         elif l_processed == 'try: import flash_rl':
                             lines[i] = f"# {lines[i]}"
-                            lines[i+1] = f"# {lines[i+1]}"
+                            if i + 1 < len(lines):
+                                lines[i+1] = f"# {lines[i+1]}"
                             logger.info("flash_rl setup removed from usercustomize.py")
                             need_write = True
+                        # Case 3: new multi-line try/except block
+                        elif l_processed == 'try:' and i + 3 < len(lines):
+                            next1 = lines[i+1].strip()
+                            next2 = lines[i+2].strip()
+                            next3 = lines[i+3].strip()
+                            if next1 == 'import flash_rl' and next2.startswith('except ImportError') and next3 == 'pass':
+                                lines[i] = f"# {lines[i]}"
+                                lines[i+1] = f"# {lines[i+1]}"
+                                lines[i+2] = f"# {lines[i+2]}"
+                                lines[i+3] = f"# {lines[i+3]}"
+                                logger.info("flash_rl setup removed from usercustomize.py")
+                                need_write = True
                         else:
                             logger.warning(
-                                "flash_rl setup found in usercustomize.py, "
-                                "but not removed, due to unknown format."
-                                f"please remove the command {lines[i]} manually."
-                                f"from {os.path.join(path, 'usercustomize.py')}"
+                                "flash_rl setup found in usercustomize.py, but not removed due to unknown format. "
+                                f"Please remove the command {lines[i]} manually from {uc_path}"
                             )
-            
+
             if need_write:
-                with open(os.path.join(path, 'usercustomize.py'), 'w') as f:
+                with open(uc_path, 'w', encoding='utf-8') as f:
                     f.writelines(lines)
 
 def profile_flashrl(name, parser):

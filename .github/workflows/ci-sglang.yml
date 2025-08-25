@@ -1,0 +1,44 @@
+name: ci-sglang
+on:
+  push:
+  pull_request:
+jobs:
+  test-sglang:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install -e .
+          pip install pytest packaging
+          # Optional: Install sglang for import/version checks in adapter path
+          pip install "sglang>=0.3.6" || true
+      - name: Run unit tests (engine args + sampler math)
+        env:
+          FLASHRL_CONFIG: bf16
+        run: |
+          pytest -q -k "sglang_patch"
+      - name: Import smoke (bf16)
+        env:
+          FLASHRL_CONFIG: bf16
+        run: |
+          python - << 'PY'
+          import flash_rl  # triggers auto activation
+          print("Imported flash_rl (bf16) OK")
+          PY
+      - name: Import smoke (fp8)
+        env:
+          FLASHRL_CONFIG: fp8
+        run: |
+          python - << 'PY'
+          import flash_rl  # triggers auto activation
+          print("Imported flash_rl (fp8) OK")
+          PY

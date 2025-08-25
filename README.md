@@ -70,6 +70,7 @@ python -m verl.trainer.main_ppo actor_rollout_ref.rollout.name=sglang ...
 Notes:
 - For very long prompts with input logprobs, prefer setting `logprob_start_len` to limit scoring scope (see SGLang docs).
 - `FLASHRL_LMHEAD_FP32` has no effect on SGLang and is ignored with a warning.
+- Optional: to avoid patching multiple backends when both vLLM and SGLang are installed, set `FLASHRL_BACKEND` to `sglang`, `vllm`, or `auto` (default is `auto`).
 
 ### RL Logprob Patch Only
 Setting the config to `bf16` to extract precise logprob used in sampling without rollout quantization. This is useful for applying the [Truncated Importance Sampling](https://fengyao.notion.site/off-policy-rl?source=copy_link). 
@@ -152,6 +153,7 @@ Below are the combinations of the environments that we have tested on.
   - Note: SGLang docs indicate FP8 KV cache requires CUDA 11.8+.
 - Recommended: `sglang >= 0.4.x`
   - Stable `return_logprob`, `logprob_start_len`, and `top_logprobs_num` in native `/generate` and Python APIs. Use `logprob_start_len` to limit prompt scoring for long inputs.
+  - You can gate Flash‑RL’s activation to a single backend via `FLASHRL_BACKEND=sglang|vllm|auto`.
   - High concurrency with `return_logprob=True` can increase memory pressure; consider reducing `--mem-fraction-static` and/or throttling.
 
 On older SGLang versions, Flash‑RL falls back to logprob‑patch‑only behavior without modifying engine quantization.
